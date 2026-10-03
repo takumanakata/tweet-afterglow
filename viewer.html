@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tweet Afterglow — Archive Viewer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f0f0f;
+      color: #e8e8e8;
+      font-family: -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── load screen ── */
+    #loadScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 20px;
+    }
+    #loadScreen h1 { font-size: 22px; color: #fff; }
+    #loadScreen p { color: #666; font-size: 14px; text-align: center; line-height: 1.8; }
+    #loadScreen label {
+      background: #1d9bf0;
+      color: #fff;
+      border-radius: 24px;
+      padding: 12px 32px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #loadScreen label:hover { background: #1a8cd8; }
+    #fileInput { display: none; }
+
+    /* ── main ── */
+    #mainView { display: none; }
+
+    /* ── header ── */
+    header {
+      background: #161616;
+      border-bottom: 1px solid #2a2a2a;
+      padding: 20px 24px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 14px;
+      letter-spacing: 0.02em;
+    }
+    header h1 span { color: #1d9bf0; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .search-wrap input {
+      width: 100%;
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 20px;
+      padding: 8px 16px 8px 36px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-wrap input:focus { border-color: #1d9bf0; }
+    .search-wrap::before {
+      content: '🔍';
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 13px;
+      pointer-events: none;
+    }
+
+    .filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    button {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 16px;
+      color: #ccc;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    button:hover { border-color: #555; color: #fff; }
+    button.active {
+      background: #1d9bf0;
+      border-color: #1d9bf0;
+      color: #fff;
+      font-weight: 600;
+    }
+    button:disabled { opacity: 0.3; cursor: default; }
+
+    .toggle-rt { background: #2a3a2a; border-color: #4caf50; color: #4caf50; }
+    .toggle-rt.off { background: #222; border-color: #333; color: #666; }
+
+    /* ── status bar ── */
+    .statusbar {
+      padding: 10px 24px;
+      background: #0f0f0f;
+      font-size: 13px;
+      color: #666;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .statusbar span { color: #999; font-weight: 600; }
+
+    /* ── tweet list ── */
+    .tweet-list {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px 16px 80px;
+    }
+
+    .tweet-card {
+      background: #161616;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 10px;
+      transition: border-color 0.15s;
+    }
+    .tweet-card:hover { border-color: #333; }
+    .tweet-card.is-rt { border-left: 3px solid #2a5a2a; }
+
+    .tweet-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .tweet-date { font-size: 13px; color: #666; }
+    .badge-rt {
+      font-size: 11px;
+      background: #1a2e1a;
+      color: #4caf50;
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+    .badge-reply {
+      font-size: 11px;
+      background: #1a1a2e;
+      color: #7b9fe8;
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+
+    .tweet-text {
+      font-size: 15px;
+      line-height: 1.65;
+      color: #e0e0e0;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .tweet-text a { color: #1d9bf0; text-decoration: none; }
+    .tweet-text a:hover { text-decoration: underline; }
+
+    .tweet-stats {
+      display: flex;
+      gap: 16px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #555;
+    }
+
+    /* ── pagination ── */
+    .pagination {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #161616;
+      border-top: 1px solid #2a2a2a;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+    }
+    .pagination button { padding: 8px 20px; font-size: 14px; }
+    .page-info { font-size: 14px; color: #777; min-width: 120px; text-align: center; }
+
+    .empty {
+      text-align: center;
+      color: #444;
+      padding: 60px 20px;
+      font-size: 16px;
+    }
+
+    mark.hl {
+      background: rgba(29,155,240,0.3);
+      color: inherit;
+      border-radius: 2px;
+      padding: 0 1px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- load screen -->
+<div id="loadScreen">
+  <h1>📚 Tweet Archive Viewer</h1>
+  <p>Pick the tweets.js from your X data export<br><small style="color:#444">runs offline, nothing is uploaded</small></p>
+  <label for="fileInput">📂 Open tweets.js</label>
+  <input type="file" id="fileInput" accept=".js">
+</div>
+
+<!-- main -->
+<div id="mainView">
+  <header>
+    <h1>📚 <span>Tweet Afterglow</span> — Archive</h1>
+    <div class="controls">
+      <div class="search-wrap">
+        <input type="text" id="searchInput" placeholder="search..." />
+      </div>
+      <div class="filter-group" id="yearButtons"></div>
+      <button class="toggle-rt" id="toggleRT">🔁 RTs shown</button>
+      <button id="sortBtn">🕐 Newest first</button>
+    </div>
+  </header>
+
+  <div class="statusbar" id="statusbar"></div>
+  <div class="tweet-list" id="tweetList"></div>
+
+  <div class="pagination">
+    <button id="prevBtn">← prev</button>
+    <div class="page-info" id="pageInfo"></div>
+    <button id="nextBtn">next →</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  let allTweets = [];
+  let filtered = [];
+  let currentPage = 1;
+  const PER_PAGE = 50;
+  let showRT = true;
+  let sortDesc = true;
+  let selectedYear = 'all';
+  let keyword = '';
+
+  // ── load file ──
+  document.getElementById('fileInput').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        // strip "window.YTD.tweets.part0 = " and parse
+        let text = ev.target.result;
+        const idx = text.indexOf('[');
+        if (idx === -1) throw new Error('no tweet data found');
+        const json = text.slice(idx);
+        const raw = JSON.parse(json);
+        allTweets = raw.map(o => o.tweet || o).sort((a, b) =>
+          new Date(b.created_at) - new Date(a.created_at)
+        );
+        initUI();
+      } catch (err) {
+        alert('could not read file: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  function initUI() {
+    document.getElementById('loadScreen').style.display = 'none';
+    document.getElementById('mainView').style.display = 'block';
+
+    // year buttons
+    const years = [...new Set(allTweets.map(t => new Date(t.created_at).getFullYear()))].sort((a,b)=>b-a);
+    const yearBtns = document.getElementById('yearButtons');
+
+    const allBtn = document.createElement('button');
+    allBtn.textContent = 'all';
+    allBtn.classList.add('active');
+    allBtn.dataset.year = 'all';
+    yearBtns.appendChild(allBtn);
+
+    years.forEach(y => {
+      const b = document.createElement('button');
+      b.textContent = y;
+      b.dataset.year = String(y);
+      yearBtns.appendChild(b);
+    });
+
+    yearBtns.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn || !btn.dataset.year) return;
+      selectedYear = btn.dataset.year;
+      yearBtns.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentPage = 1;
+      render();
+    });
+
+    document.getElementById('searchInput').addEventListener('input', e => {
+      keyword = e.target.value.trim();
+      currentPage = 1;
+      render();
+    });
+
+    document.getElementById('toggleRT').addEventListener('click', function () {
+      showRT = !showRT;
+      this.textContent = showRT ? '🔁 RTs shown' : '🔁 RTs hidden';
+      this.classList.toggle('off', !showRT);
+      currentPage = 1;
+      render();
+    });
+
+    document.getElementById('sortBtn').addEventListener('click', function () {
+      sortDesc = !sortDesc;
+      this.textContent = sortDesc ? '🕐 Newest first' : '🕐 Oldest first';
+      currentPage = 1;
+      render();
+    });
+
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (currentPage > 1) { currentPage--; render(); window.scrollTo(0, 0); }
+    });
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      const total = Math.ceil(filtered.length / PER_PAGE);
+      if (currentPage < total) { currentPage++; render(); window.scrollTo(0, 0); }
+    });
+
+    render();
+  }
+
+  function applyFilter() {
+    let list = allTweets;
+    if (!showRT) list = list.filter(t => !t.full_text.startsWith('RT @'));
+    if (selectedYear !== 'all') list = list.filter(t => new Date(t.created_at).getFullYear() == selectedYear);
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      list = list.filter(t => t.full_text.toLowerCase().includes(kw));
+    }
+    filtered = sortDesc ? list : [...list].reverse();
+  }
+
+  function formatDate(str) {
+    const d = new Date(str);
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatText(text) {
+    let s = escHtml(text);
+    s = s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    if (keyword) {
+      const kw = escHtml(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      s = s.replace(new RegExp(`(${kw})`, 'gi'), '<mark class="hl">$1</mark>');
+    }
+    return s;
+  }
+
+  function render() {
+    applyFilter();
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / PER_PAGE) || 1;
+    currentPage = Math.min(currentPage, totalPages);
+    const start = (currentPage - 1) * PER_PAGE;
+    const page = filtered.slice(start, start + PER_PAGE);
+
+    document.getElementById('statusbar').innerHTML =
+      `showing <span>${total.toLocaleString()}</span> of <span>${allTweets.length.toLocaleString()}</span> tweets`;
+    document.getElementById('pageInfo').textContent = `page ${currentPage} / ${totalPages}`;
+    document.getElementById('prevBtn').disabled = currentPage <= 1;
+    document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+
+    const list = document.getElementById('tweetList');
+    if (page.length === 0) {
+      list.innerHTML = '<div class="empty">no tweets match 🕳️</div>';
+      return;
+    }
+
+    list.innerHTML = page.map(t => {
+      const isRT = t.full_text.startsWith('RT @');
+      const isReply = t.full_text.startsWith('@') && !isRT;
+      const fav = parseInt(t.favorite_count) || 0;
+      const rt  = parseInt(t.retweet_count)  || 0;
+      return `
+        <div class="tweet-card${isRT ? ' is-rt' : ''}">
+          <div class="tweet-meta">
+            <span class="tweet-date">${formatDate(t.created_at)}</span>
+            ${isRT    ? '<span class="badge-rt">RT</span>'      : ''}
+            ${isReply ? '<span class="badge-reply">reply</span>' : ''}
+          </div>
+          <div class="tweet-text">${formatText(t.full_text)}</div>
+          ${fav > 0 || rt > 0 ? `<div class="tweet-stats">
+            ${fav > 0 ? `<span>❤️ ${fav.toLocaleString()}</span>` : ''}
+            ${rt  > 0 ? `<span>🔁 ${rt.toLocaleString()}</span>`  : ''}
+          </div>` : ''}
+        </div>`;
+    }).join('');
+  }
+})();
+</script>
+</body>
+</html>

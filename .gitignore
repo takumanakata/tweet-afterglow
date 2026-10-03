@@ -1,0 +1,9 @@
+# personal data — never commit
+data/
+config.json
+_archive/
+*.zip
+
+# OS / editor
+.DS_Store
+.claude/
