@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>Tweet Afterglow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f0f; --panel: #161616; --line: #2a2a2a; --fg: #e8e8e8; --dim: #8a8a8a; --dim2: #555;
+    --keep: #2ecc71; --del: #ff5c5c; --skip: #555; --accent: #1d9bf0; --warn: #ffb700;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic', 'Segoe UI', sans-serif; line-height: 1.5; }
+  button, input, select, textarea { font-family: inherit; font-size: 14px; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  a { color: var(--accent); }
+  code { background: #222; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; display: flex; align-items: center; gap: 10px; }
+  h2 .num { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; background: #2a2a2a; color: #ccc; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+  h2 .num.done { background: var(--keep); color: #042; }
+  p.hint { color: var(--dim); font-size: 13px; }
+
+  .top { position: sticky; top: 0; z-index: 50; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .top .title { font-weight: 700; font-size: 16px; }
+  .top .tagline { color: var(--dim); font-size: 12px; }
+  .top .spacer { flex: 1; }
+  .counts { display: flex; gap: 6px; font-size: 12px; }
+  .counts span { background: #1f1f1f; border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; }
+  .counts b.k { color: var(--keep); } .counts b.d { color: var(--del); } .counts b.s { color: var(--dim); }
+  .lang button { background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  .lang button.on { color: #fff; border-color: #666; }
+
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 120px; }
+  section.step { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 14px; }
+  section.step.locked { opacity: .45; pointer-events: none; }
+  section.step > h2 { margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .btn { background: #222; border: 1px solid #3a3a3a; color: #eee; border-radius: 10px; padding: 8px 14px; font-size: 14px; }
+  .btn:hover:not(:disabled) { background: #2a2a2a; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .btn.good { background: var(--keep); border-color: var(--keep); color: #042; font-weight: 700; }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .btn.ok { background: #1a5e38; border-color: #1a5e38; color: #fff; }
+  label.field { display: block; margin: 12px 0; }
+  label.field > span { display: block; font-size: 13px; color: var(--dim); margin-bottom: 4px; }
+  input[type=text], input[type=date], input[type=number], textarea, select {
+    width: 100%; background: #0f0f0f; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; color: #fff; outline: none;
+  }
+  input[type=number] { width: 90px; }
+  textarea { min-height: 70px; resize: vertical; line-height: 1.5; }
+  textarea.rubric { min-height: 160px; font-size: 13px; }
+  input[type=file] { display: none; }
+  .note { background: #1b1b1b; border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 13px; color: #ccc; margin: 10px 0; }
+  .note.warn { border-color: var(--warn); }
+  .note.priv { border-color: var(--keep); }
+  .pill { display: inline-block; background: #222; border-radius: 10px; padding: 1px 8px; font-size: 12px; color: #bbb; }
+
+  /* pivot picker */
+  .picker { max-height: 260px; overflow: auto; border: 1px solid #2a2a2a; border-radius: 8px; margin-top: 6px; }
+  .picker div { padding: 7px 10px; border-bottom: 1px solid #1f1f1f; font-size: 13px; cursor: pointer; display: flex; gap: 10px; }
+  .picker div:hover { background: #1f1f1f; }
+  .picker div .d { color: var(--dim); flex: none; }
+  .picker div.sel { background: #10301c; }
+  .pivot-now { margin-top: 8px; font-size: 13px; padding: 8px 10px; background: #0f0f0f; border-radius: 8px; border: 1px solid #2a2a2a; }
+
+  /* rule stats */
+  table.stats { border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  table.stats td { padding: 3px 12px 3px 0; color: #ccc; }
+  table.stats td:first-child { color: var(--dim); }
+
+  /* batches */
+  .batches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 10px 0; }
+  .batch { border: 1px solid #333; border-radius: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer; background: #1b1b1b; }
+  .batch.sel { border-color: var(--accent); }
+  .batch.done { border-color: var(--keep); color: var(--keep); }
+  .batch small { display: block; color: var(--dim); font-size: 11px; }
+  .pastebox { min-height: 110px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+
+  /* review */
+  .stats-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
+  .stat { background: #1f1f1f; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  .stat b { font-size: 14px; margin-left: 4px; }
+  .stat.keep b { color: var(--keep); } .stat.delete b { color: var(--del); } .stat.skip b { color: var(--dim); }
+  .stat.on { border-color: var(--accent); }
+  .yearbar { display: flex; gap: 3px; align-items: flex-end; height: 44px; margin: 4px 0 14px; }
+  .yearbar div { flex: 1; background: #2a2a2a; position: relative; border-radius: 2px 2px 0 0; cursor: pointer; }
+  .yearbar div i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--keep); border-radius: 2px 2px 0 0; }
+  .yearbar div span { position: absolute; top: 100%; left: 0; right: 0; text-align: center; font-size: 9px; color: var(--dim); }
+  .yearbar div.on { outline: 1px solid var(--accent); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .controls input[type=text] { flex: 1; min-width: 160px; }
+  .controls select { width: auto; }
+  .tweet { background: #121212; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; }
+  .tweet.keep { border-left: 4px solid var(--keep); }
+  .tweet.delete { border-left: 4px solid #5a2a2a; }
+  .tweet.skip { border-left: 4px solid var(--skip); opacity: .7; }
+  .tweet.overridden { outline: 1px dashed var(--accent); }
+  .meta { font-size: 11px; color: var(--dim); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .meta .cat { background: #222; border-radius: 10px; padding: 1px 8px; color: #bbb; }
+  .meta .cat.k { color: var(--keep); } .meta .cat.lock { color: var(--warn); }
+  .meta .reason { color: #9c9; }
+  .meta a { color: var(--dim); text-decoration: none; } .meta a:hover { color: var(--accent); }
+  .text { font-size: 14px; white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
+  .text a { text-decoration: none; }
+  .text mark { background: #3a3a00; color: #ffe; border-radius: 2px; }
+  .act { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+  .act button { border: 1px solid #333; background: #1f1f1f; color: #ccc; border-radius: 8px; padding: 6px 12px; font-size: 12px; min-width: 76px; }
+  .act button.on-keep { background: var(--keep); color: #042; border-color: var(--keep); font-weight: 700; }
+  .act button.on-del  { background: #5a2a2a; color: #fdd; border-color: #7a3a3a; font-weight: 700; }
+  .pager { display: flex; justify-content: center; gap: 8px; align-items: center; margin: 14px 0; font-size: 13px; color: var(--dim); }
+  .empty { text-align: center; color: var(--dim); padding: 40px 0; }
+  ol.steps { padding-left: 22px; font-size: 14px; }
+  ol.steps li { margin: 6px 0; }
+  kbd { background: #222; border: 1px solid #444; border-radius: 4px; padding: 0 6px; font-size: 12px; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #222; border: 1px solid #444; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px; display: none; z-index: 200; max-width: 90vw; }
+  footer { text-align: center; color: var(--dim2); font-size: 12px; padding: 30px 0; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span class="title">Tweet Afterglow</span>
+  <span class="tagline" data-t="tagline"></span>
+  <span class="spacer"></span>
+  <span class="counts" id="counts"></span>
+  <span class="lang"><button id="langEn" class="on">EN</button> <button id="langJa">日本語</button></span>
+</div>
+
+<main>
+  <div class="note priv" data-t="privacy"></div>
+
+  <!-- 1. archive -->
+  <section class="step" id="s1">
+    <h2><span class="num" id="n1">1</span><span data-t="s1_title"></span></h2>
+    <p class="hint" data-t="s1_hint"></p>
+    <div class="row">
+      <label class="btn primary" id="btnFile"><span data-t="s1_btn"></span><input type="file" id="fileTweets" accept=".js,.json"></label>
+      <span id="fileInfo" class="pill" style="display:none"></span>
+    </div>
+  </section>
+
+  <!-- 2. settings -->
+  <section class="step locked" id="s2">
+    <h2><span class="num" id="n2">2</span><span data-t="s2_title"></span></h2>
+    <p class="hint" data-t="s2_hint"></p>
+
+    <label class="field"><span data-t="pivot_label"></span>
+      <input type="text" id="pivotSearch" data-ph="pivot_search">
+    </label>
+    <div class="picker" id="pivotPicker" style="display:none"></div>
+    <div class="row">
+      <span class="hint" data-t="pivot_or"></span>
+      <input type="date" id="pivotDate" style="width:auto">
+      <button class="btn small" id="pivotClear" data-t="pivot_clear"></button>
+    </div>
+    <div class="pivot-now" id="pivotNow"></div>
+
+    <label class="field"><span data-t="blocked_label"></span>
+      <textarea id="blocked" data-ph="blocked_ph"></textarea>
+    </label>
+    <label class="field"><span data-t="profile_label"></span>
+      <textarea id="profile" data-ph="profile_ph"></textarea>
+    </label>
+    <details>
+      <summary class="hint" style="cursor:pointer" data-t="advanced"></summary>
+      <label class="field"><span data-t="minfav_label"></span><input type="number" id="minFav" min="0" value="3"></label>
+      <label class="field"><span data-t="batch_label"></span><input type="number" id="batchSize" min="20" max="500" value="150"></label>
+      <label class="field"><span data-t="rubric_label"></span><textarea id="rubric" class="rubric"></textarea></label>
+      <button class="btn small" id="rubricReset" data-t="rubric_reset"></button>
+    </details>
+  </section>
+
+  <!-- 3. rules -->
+  <section class="step locked" id="s3">
+    <h2><span class="num" id="n3">3</span><span data-t="s3_title"></span></h2>
+    <p class="hint" data-t="s3_hint"></p>
+    <table class="stats" id="ruleStats"></table>
+  </section>
+
+  <!-- 4. AI -->
+  <section class="step locked" id="s4">
+    <h2><span class="num" id="n4">4</span><span data-t="s4_title"></span></h2>
+    <p class="hint" data-t="s4_hint"></p>
+    <div class="note warn" data-t="s4_privacy"></div>
+    <div class="batches" id="batches"></div>
+    <div class="row">
+      <button class="btn primary" id="copyBatch" data-t="copy_batch"></button>
+      <span id="batchInfo" class="hint"></span>
+    </div>
+    <label class="field"><span data-t="paste_label"></span>
+      <textarea id="pasteBox" class="pastebox" data-ph="paste_ph"></textarea>
+    </label>
+    <div class="row">
+      <button class="btn good" id="applyPaste" data-t="apply_paste"></button>
+      <span id="pasteInfo" class="hint"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn small" id="clearAi" data-t="clear_ai"></button>
+    </div>
+    <p class="hint" data-t="s4_skip"></p>
+  </section>
+
+  <!-- 5. review -->
+  <section class="step locked" id="s5">
+    <h2><span class="num" id="n5">5</span><span data-t="s5_title"></span></h2>
+    <p class="hint" data-t="s5_hint"></p>
+    <div class="stats-row" id="stats"></div>
+    <div class="yearbar" id="yearbar"></div>
+    <div class="controls">
+      <input type="text" id="q" data-ph="search_ph">
+      <select id="cat"></select>
+      <select id="src">
+        <option value="" data-t="src_all"></option>
+        <option value="ai" data-t="src_ai"></option>
+        <option value="rule" data-t="src_rule"></option>
+        <option value="manual" data-t="src_manual"></option>
+      </select>
+      <button class="btn small" id="sort"></button>
+      <button class="btn small" id="resetOv" data-t="reset_manual"></button>
+    </div>
+    <div id="list"></div>
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <!-- 6. delete -->
+  <section class="step locked" id="s6">
+    <h2><span class="num" id="n6">6</span><span data-t="s6_title"></span></h2>
+    <div class="row">
+      <button class="btn good" id="exportList" data-t="export_list"></button>
+      <button class="btn primary" id="copyDeleter" data-t="copy_deleter"></button>
+      <a class="btn small" id="dlDeleter" href="deleter.js" download style="text-decoration:none" data-t="dl_deleter"></a>
+    </div>
+    <ol class="steps" id="deleteSteps"></ol>
+    <div class="note" data-t="s6_note"></div>
+  </section>
+
+  <footer>
+    <span data-t="footer"></span> · <a href="https://github.com/takumanakata/tweet-afterglow">GitHub</a>
+  </footer>
+</main>
+<div id="toast"></div>
+
+<script>
+(function () {
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+//  strings
+// ─────────────────────────────────────────────────────────────
+const T = {
+en: {
+  tagline: 'Clean up your old tweets without losing the good ones.',
+  privacy: 'Privacy: this page has no server. Your archive is read inside your browser and never uploaded. Settings and progress stay in this browser. The only data that ever leaves is (a) tweet text you choose to paste into an AI in step 4, and (b) the delete requests your own browser sends to x.com in step 6.',
+  s1_title: 'Load your X archive', s1_hint: 'X → Settings → Your account → Download an archive of your data. X emails a zip a day later. Inside it: data/tweets.js. Pick that file.',
+  s1_btn: '📂 Open tweets.js',
+  s2_title: 'Say what you want', s2_hint: 'Nothing on or after the pivot is touched. Everything older is deleted, except what the rules and the AI decide to keep.',
+  pivot_label: 'Pivot: search one of your tweets and click it. Everything older than it is in scope.', pivot_search: 'type a word from the tweet…',
+  pivot_or: 'or pick a date:', pivot_clear: 'clear',
+  pivot_none: 'No pivot set: every tweet in the archive is in scope.', pivot_set: 'Pivot:', pivot_scope: 'in scope (older)',
+  blocked_label: 'Always delete: user names or words, one per line. Any tweet mentioning, replying to or retweeting them is deleted no matter what.', blocked_ph: '@someone\ntheir nickname',
+  profile_label: 'About you, for the AI: who you are, what counts as an achievement. A few lines.', profile_ph: 'Media artist working with real-time graphics. Selected for … in 2019, spoke at …',
+  advanced: 'Advanced: likes threshold, batch size, the AI rubric',
+  minfav_label: 'Tweets with at least this many likes go to the AI pass even without keywords', batch_label: 'Tweets per AI batch (smaller if your AI cuts off)',
+  rubric_label: 'Rubric the AI follows (edit freely; {{PROFILE}} is replaced by the text above)', rubric_reset: 'reset rubric to default',
+  s3_title: 'Rules', s3_hint: 'Instant. Retweets, replies, auto-posts, blocked people and plain chatter go to delete. The rest become candidates for the AI.',
+  r_recent: 'newer than pivot (untouched)', r_blocked: 'blocked user / word', r_retweet: 'retweets', r_reply: 'replies', r_auto: 'auto-posts', r_quote: 'old-style quote RTs', r_casual: 'casual (no keyword, link or likes)', r_candidate: 'candidates for the AI',
+  s4_title: 'AI pass (optional)', s4_hint: 'Click a batch, copy, paste it into any AI chat (ChatGPT, Claude, Gemini…), copy the reply, paste it back. Repeat for each batch.',
+  s4_privacy: 'This is the one step where tweet text leaves your computer: it goes to the AI you choose. Skip the step if you prefer; then every candidate is deleted.',
+  copy_batch: '📋 Copy batch', batch_sel: 'batch', of: 'of', tweets: 'tweets', judged: 'judged', unjudged: 'unjudged',
+  paste_label: 'Paste the AI reply here', paste_ph: '12345 keep achievement selected for …\n12346 delete\n…',
+  apply_paste: 'Apply', clear_ai: 'clear all AI results',
+  applied: 'applied', unknown_ids: 'lines without a known id', s4_skip: 'Skip this step and every candidate is deleted. You can still rescue tweets by hand in step 5.',
+  copied: 'copied to clipboard', copy_fail: 'copy failed — select the text and copy by hand',
+  s5_title: 'Review', s5_hint: 'Keep is shown first. Flip anything. Search the delete side for things that slipped through.',
+  st_keep: 'keep', st_delete: 'delete', st_skip: 'untouched', st_all: 'all',
+  search_ph: '🔍 search', cat_all: 'category: all', src_all: 'decided by: all', src_ai: 'AI', src_rule: 'rules', src_manual: 'changed by me',
+  newest: 'newest first', oldest: 'oldest first', reset_manual: 'reset my changes', reset_confirm: 'Revert all manual changes?', nothing: 'nothing matches',
+  keep: 'keep', delete: 'delete', locked_tip: 'locked by rules (pivot or blocked list)', manual: 'manual', rule: 'rule', open: 'open ↗',
+  s6_title: 'Delete',
+  export_list: '⬇ Download delete_list.json', copy_deleter: '📋 Copy deleter script', dl_deleter: 'or download deleter.js',
+  d1: 'Download delete_list.json (button above).', d2: 'Log in to x.com in Chrome or Edge.',
+  d3: 'Open the console: Mac <kbd>⌘</kbd><kbd>Option</kbd><kbd>J</kbd> · Windows <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>J</kbd>.',
+  d4: 'Copy the deleter script (button above), click into the console, paste, Enter. If it says pasting is blocked, type <code>allow pasting</code>, Enter, paste again.',
+  d5: 'A green panel appears bottom-right. <b>Load list</b> → the delete_list.json you downloaded.',
+  d6: 'Tick <b>DRY RUN</b>, <b>START</b>, watch the log. Then untick and START for real.',
+  s6_note: 'X allows about 200 deletions every 15 minutes; the script waits and resumes by itself. Keep that tab visible (its own window is best) and the computer awake. If it stops, paste the script again: it continues where it left off.',
+  exported: 'downloaded delete_list.json and keep_list.json',
+  footer: 'Free, local, MIT. Use at your own risk.',
+  cats: { achievement: 'achievement', announce: 'announcement', work: 'own work', milestone: 'milestone', press: 'press', reaction: 'reaction', share: 'share', casual: 'casual', wip: 'work in progress', opinion: 'opinion', event_attend: 'attended event', other: 'other', retweet: 'retweet', reply: 'reply', blocked: 'blocked', auto: 'auto-post', quote: 'old-style quote RT', candidate: 'candidate (no AI result)', recent: 'newer than pivot' },
+  loaded: 'tweets loaded',
+},
+ja: {
+  tagline: '古いツイートを片付ける。でも、残したいものは残す。',
+  privacy: 'プライバシー: このページにサーバーはありません。アーカイブはブラウザの中で読まれ、どこにもアップロードされません。設定と進捗もこのブラウザに残るだけです。外に出るデータは (a) 手順4であなたが AI に貼ると決めたツイート本文、(b) 手順6であなたのブラウザが x.com に送る削除リクエスト、の2つだけです。',
+  s1_title: 'X のアーカイブを読み込む', s1_hint: 'X → 設定 → アカウント → データのアーカイブをダウンロード。1日ほどで zip がメールで届きます。その中の data/tweets.js を選んでください。',
+  s1_btn: '📂 tweets.js を開く',
+  s2_title: '希望を書く', s2_hint: '境界より新しいものは触りません。それより古いものは、ルールと AI が「残す」と判断したもの以外すべて削除対象になります。',
+  pivot_label: '境界: 自分のツイートを検索してクリック。それより古いものが対象になります。', pivot_search: 'ツイートに含まれる言葉を入力…',
+  pivot_or: 'または日付で:', pivot_clear: '解除',
+  pivot_none: '境界なし: アーカイブ内の全ツイートが対象です。', pivot_set: '境界:', pivot_scope: '件が対象（これより古い）',
+  blocked_label: '必ず消す: ユーザー名や言葉を1行に1つ。言及・返信・RT を含むツイートは無条件で削除します。', blocked_ph: '@someone\nあだ名',
+  profile_label: '自己紹介（AI 用）: 自分が何者で、何が実績にあたるか。数行で。', profile_ph: 'リアルタイム映像を扱うメディアアーティスト。2019年に…に選出、…で登壇。',
+  advanced: '詳細: いいね数のしきい値、バッチの大きさ、AI の判定基準',
+  minfav_label: 'いいねがこの数以上のツイートは、キーワードがなくても AI 判定に回す', batch_label: 'AI に渡す1回あたりの件数（返事が途切れるなら小さく）',
+  rubric_label: 'AI が従う判定基準（自由に編集可。{{PROFILE}} は上の自己紹介に置き換わります）', rubric_reset: '判定基準を初期値に戻す',
+  s3_title: 'ルール判定', s3_hint: '即座に終わります。RT・返信・自動投稿・指定した相手・ただのつぶやきは削除側へ。残りが AI 判定の候補になります。',
+  r_recent: '境界より新しい（触らない）', r_blocked: '指定した相手・言葉', r_retweet: 'リツイート', r_reply: '返信', r_auto: '自動投稿', r_quote: '旧式の引用RT', r_casual: '日常のつぶやき（キーワード・リンク・いいねなし）', r_candidate: 'AI 判定の候補',
+  s4_title: 'AI 判定（任意）', s4_hint: 'バッチをクリックしてコピー → 使っている AI チャット（ChatGPT、Claude、Gemini…）に貼る → 返事をコピー → ここに貼る。バッチの数だけ繰り返します。',
+  s4_privacy: 'ツイート本文がパソコンの外に出るのはこの手順だけです（あなたが選んだ AI に渡ります）。嫌なら飛ばしてください。その場合、候補はすべて削除になります。',
+  copy_batch: '📋 バッチをコピー', batch_sel: 'バッチ', of: '/', tweets: '件', judged: '判定済み', unjudged: '未判定',
+  paste_label: 'AI の返事をここに貼る', paste_ph: '12345 keep achievement …に選出\n12346 delete\n…',
+  apply_paste: '反映', clear_ai: 'AI の結果をすべて消す',
+  applied: '件を反映', unknown_ids: '行は ID が見つかりませんでした', s4_skip: 'この手順を飛ばすと候補はすべて削除になります。手順5で手動で救い出すことはできます。',
+  copied: 'コピーしました', copy_fail: 'コピーできませんでした。テキストを選択して手でコピーしてください',
+  s5_title: '確認', s5_hint: '最初に「残す」側が出ます。気になるものは切り替えてください。「消す」側も検索して、残したいものが混ざっていないか見てください。',
+  st_keep: '残す', st_delete: '消す', st_skip: '触らない', st_all: 'すべて',
+  search_ph: '🔍 検索', cat_all: 'カテゴリ: すべて', src_all: '判定元: すべて', src_ai: 'AI', src_rule: 'ルール', src_manual: '手動で変更',
+  newest: '新しい順', oldest: '古い順', reset_manual: '手動変更をリセット', reset_confirm: '手動で変更した判定をすべて元に戻しますか？', nothing: '該当なし',
+  keep: '残す', delete: '消す', locked_tip: 'ルールで固定（境界または指定した相手）', manual: '手動', rule: 'ルール', open: '開く ↗',
+  s6_title: '削除',
+  export_list: '⬇ delete_list.json をダウンロード', copy_deleter: '📋 削除スクリプトをコピー', dl_deleter: 'または deleter.js をダウンロード',
+  d1: 'delete_list.json をダウンロード（上のボタン）。', d2: 'Chrome か Edge で x.com にログイン。',
+  d3: 'コンソールを開く: Mac <kbd>⌘</kbd><kbd>Option</kbd><kbd>J</kbd> ・ Windows <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>J</kbd>。',
+  d4: '削除スクリプトをコピー（上のボタン）し、コンソールをクリックして貼り付け、Enter。「貼り付けはブロック」と出たら <code>allow pasting</code> と打って Enter、もう一度貼る。',
+  d5: '右下に緑のパネルが出ます。<b>Load list</b> → ダウンロードした delete_list.json。',
+  d6: '<b>DRY RUN</b> にチェックして <b>START</b>、ログを確認。問題なければチェックを外して START で本番。',
+  s6_note: 'X の制限で 15 分に 200 件ほど。スクリプトが勝手に待って再開します。そのタブは見える状態（別ウィンドウが最適）にして、PC はスリープさせないでください。止まったら、もう一度貼れば続きから動きます。',
+  exported: 'delete_list.json と keep_list.json をダウンロードしました',
+  footer: '無料・ローカル・MIT。自己責任でお使いください。',
+  cats: { achievement: '実績', announce: '告知', work: '作品発表', milestone: '節目', press: '掲載', reaction: '反応・感想', share: '共有', casual: '日常', wip: '制作途中', opinion: '意見', event_attend: 'イベント参加', other: 'その他', retweet: 'RT', reply: '返信', blocked: '指定した相手', auto: '自動投稿', quote: '旧式引用RT', candidate: '候補（AI 判定なし）', recent: '境界より新しい' },
+  loaded: '件を読み込みました',
+},
+};
+
+const DEFAULT_RUBRIC = `You are helping the author of these tweets decide which old tweets to KEEP and which to DELETE.
+
+About the author:
+{{PROFILE}}
+
+Policy: delete everything by default. Keep only achievements and announcements of the author's own work. When unsure, delete. Ask: would this post still be a plus if it stayed public for years?
+
+KEEP categories:
+- achievement: being selected, awarded, accepted, interviewed, covered
+- announce: the author's own exhibitions, talks, performances, workshops, broadcasts, releases
+- work: presenting the author's own finished work with a link, video or image
+- milestone: career milestones (new job, going independent, moving abroad, residency start/end)
+- press: the author's work featured in an article or interview
+
+DELETE categories:
+- reaction: reactions to other people's work, events or news
+- share: sharing other people's articles, videos, tools
+- casual: daily life, mood, chatter, jokes, food, travel
+- wip: work-in-progress notes, tech notes, "got it working"
+- opinion: opinions, critique, politics, complaints, resolutions
+- event_attend: attending an event as audience
+- other: anything else
+
+Notes: "made this" alone is not work; only finished work presented with a title, link, video or venue. Promoting other people's events is share. A high like count alone is not a reason to keep. Anything negative, aggressive, embarrassing, about other people, private, or likely to age badly: delete, even if it is also an achievement. Early posts (student / junior years) deserve a stricter eye. Same standard in every language.`;
+
+const KEYWORDS = /公開|展示|出演|登壇|発表|リリース|受賞|掲載|取材|個展|ワークショップ|出展|開催|発売|選ばれ|受かっ|合格|入選|採択|ノミネート|放送|上映|ローンチ|レジデン|作りました|作った|制作|VJ|ライブ|イベント|フェス|講師|授業|参加|release|exhibit|talk|speak|announce|award|selected|featured|premiere|launch|residen|vimeo\.com|youtu/i;
+const AUTO_TEXT = /^I just liked|^I liked a @YouTube|^I uploaded a @YouTube|^I added a video to a @YouTube|\(live at http|^Just posted a photo|^#nowplaying|^Photo: |^Photoset: /i;
+const AUTO_SOURCE = new Set(['Vimeo', 'Instagram', 'foursquare', 'Foursquare', 'Swarm', 'Swarm by Foursquare', 'YouTube', 'Tumblr', 'Behance', 'SoundCloud']);
+const OLD_QUOTE_RT = /\sRT @\w+:?/;
+const KEEP_CATS = new Set(['achievement', 'announce', 'work', 'milestone', 'press']);
+const LOCKED = new Set(['recent', 'blocked']);
+const TWITTER_EPOCH = 1288834974657n;
+const STORE = 'tweetafterglow_v3';
+
+// ─────────────────────────────────────────────────────────────
+//  state
+// ─────────────────────────────────────────────────────────────
+let lang = 'en';
+let tweets = [];                // parsed archive
+let S = {                       // persisted
+  pivotId: null, pivotDate: '', blocked: '', profile: '', minFav: 3, batchSize: 150, rubric: DEFAULT_RUBRIC,
+  ai: {},                       // id -> {d, c, r}
+  overrides: {},                // id -> 'keep' | 'delete'
+};
+let rules = new Map();          // id -> {d, c}
+let candidates = [];            // tweets going to the AI pass, sorted by id
+let selBatch = 0;
+let view = { d: 'keep', cat: '', src: '', q: '', year: '', desc: true, page: 0 };
+const PAGE = 100;
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h !== undefined) e.innerHTML = h; return e; };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const t = k => (T[lang][k] ?? T.en[k] ?? k);
+const catName = c => (T[lang].cats[c] ?? T.en.cats[c] ?? c);
+function toast(msg) { const x = $('#toast'); x.textContent = msg; x.style.display = 'block'; clearTimeout(x._t); x._t = setTimeout(() => x.style.display = 'none', 3000); }
+function save() { try { localStorage.setItem(STORE, JSON.stringify({ lang, S })); } catch (e) { toast('save failed: ' + e.message); } }
+function load() {
+  try { const o = JSON.parse(localStorage.getItem(STORE) || 'null'); if (o) { lang = o.lang || 'en'; S = { ...S, ...o.S }; } } catch {}
+}
+
+// ─────────────────────────────────────────────────────────────
+//  tweet helpers
+// ─────────────────────────────────────────────────────────────
+const text = tw => tw.full_text || tw.text || '';
+const source = tw => (tw.source || '').replace(/<[^>]+>/g, '');
+const mentions = tw => ((tw.entities || {}).user_mentions || []).map(m => m.screen_name.toLowerCase());
+const media = tw => ((tw.extended_entities || {}).media) || ((tw.entities || {}).media) || [];
+const urls = tw => [...((tw.entities || {}).urls || []).map(u => u.expanded_url || u.url), ...media(tw).map(m => m.media_url_https || m.media_url)].filter(Boolean);
+const fav = tw => +tw.favorite_count || 0;
+const rtc = tw => +tw.retweet_count || 0;
+const date = tw => new Date(tw.created_at);
+const isRT = tw => text(tw).startsWith('RT @');
+const isReply = tw => !!(tw.in_reply_to_status_id_str || tw.in_reply_to_user_id_str) || text(tw).startsWith('@');
+const isAuto = tw => AUTO_TEXT.test(text(tw)) || AUTO_SOURCE.has(source(tw));
+const isQuote = tw => OLD_QUOTE_RT.test(text(tw));
+const idLT = (a, b) => BigInt(a) < BigInt(b);
+function pivotFromDate(d) { if (!d) return null; const ms = BigInt(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))); return ((ms - TWITTER_EPOCH) << 22n).toString(); }
+function effectivePivot() { return S.pivotId || pivotFromDate(S.pivotDate); }
+function blockedSets() {
+  const users = new Set(), words = [];
+  S.blocked.split('\n').map(s => s.trim()).filter(Boolean).forEach(s => { if (/^@?[A-Za-z0-9_]{1,15}$/.test(s)) users.add(s.replace(/^@/, '').toLowerCase()); words.push(s.replace(/^@/, '')); });
+  const re = words.length ? new RegExp(words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i') : null;
+  return { users, re };
+}
+
+// ─────────────────────────────────────────────────────────────
+//  rules
+// ─────────────────────────────────────────────────────────────
+function runRules() {
+  const pivot = effectivePivot();
+  const { users, re } = blockedSets();
+  rules = new Map(); candidates = [];
+  for (const tw of tweets) {
+    let r;
+    if (pivot && !idLT(tw.id, pivot)) r = ['skip', 'recent'];
+    else if ((users.size && (mentions(tw).some(m => users.has(m)) || users.has((tw.in_reply_to_screen_name || '').toLowerCase()))) || (re && re.test(text(tw)))) r = ['delete', 'blocked'];
+    else if (isRT(tw)) r = ['delete', 'retweet'];
+    else if (isReply(tw)) r = ['delete', 'reply'];
+    else if (isAuto(tw)) r = ['delete', 'auto'];
+    else if (isQuote(tw)) r = ['delete', 'quote'];
+    else if (KEYWORDS.test(text(tw)) || fav(tw) >= S.minFav || urls(tw).length) { r = ['review', 'candidate']; candidates.push(tw); }
+    else r = ['delete', 'casual'];
+    rules.set(tw.id, { d: r[0], c: r[1] });
+  }
+  candidates.sort((a, b) => idLT(a.id, b.id) ? -1 : 1);
+}
+function decisionOf(tw) {
+  const o = S.overrides[tw.id]; if (o) return o;
+  const r = rules.get(tw.id);
+  if (r.d !== 'review') return r.d;
+  const a = S.ai[tw.id];
+  return a ? a.d : 'delete';
+}
+function categoryOf(tw) {
+  const r = rules.get(tw.id);
+  if (r.d !== 'review') return r.c;
+  const a = S.ai[tw.id];
+  return a ? a.c : 'candidate';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  UI: language + static text
+// ─────────────────────────────────────────────────────────────
+function applyLang() {
+  document.documentElement.lang = lang;
+  $$('[data-t]').forEach(e => { e.innerHTML = t(e.dataset.t); });
+  $$('[data-ph]').forEach(e => { e.placeholder = t(e.dataset.ph); });
+  $('#langEn').classList.toggle('on', lang === 'en'); $('#langJa').classList.toggle('on', lang === 'ja');
+  $('#sort').textContent = view.desc ? t('newest') : t('oldest');
+  $('#deleteSteps').innerHTML = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6'].map(k => `<li>${t(k)}</li>`).join('');
+  if (tweets.length) renderAll();
+}
+$('#langEn').onclick = () => { lang = 'en'; save(); applyLang(); };
+$('#langJa').onclick = () => { lang = 'ja'; save(); applyLang(); };
+
+// ─────────────────────────────────────────────────────────────
+//  step 1: load
+// ─────────────────────────────────────────────────────────────
+$('#fileTweets').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const raw = await f.text();
+    const i = raw.indexOf('['); if (i < 0) throw new Error('no tweet data found');
+    tweets = JSON.parse(raw.slice(i).trim().replace(/;$/, '')).map(x => x.tweet || x);
+    $('#fileInfo').style.display = ''; $('#fileInfo').textContent = `${f.name} · ${tweets.length.toLocaleString()} ${t('loaded')}`;
+    $('#btnFile').classList.add('ok'); $('#n1').classList.add('done');
+    ['s2', 's3', 's4', 's5', 's6'].forEach(id => $('#' + id).classList.remove('locked'));
+    renderAll();
+    $('#s2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) { toast('could not read tweets.js: ' + err.message); }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  step 2: settings
+// ─────────────────────────────────────────────────────────────
+function bindSettings() {
+  $('#blocked').value = S.blocked; $('#profile').value = S.profile; $('#minFav').value = S.minFav; $('#batchSize').value = S.batchSize; $('#rubric').value = S.rubric; $('#pivotDate').value = S.pivotDate;
+  const onChange = () => { S.blocked = $('#blocked').value; S.profile = $('#profile').value; S.minFav = +$('#minFav').value || 0; S.batchSize = Math.max(20, +$('#batchSize').value || 150); S.rubric = $('#rubric').value; save(); if (tweets.length) renderAll(); };
+  ['blocked', 'profile', 'minFav', 'batchSize', 'rubric'].forEach(id => { $('#' + id).addEventListener('change', onChange); });
+  $('#rubricReset').onclick = () => { S.rubric = DEFAULT_RUBRIC; $('#rubric').value = S.rubric; save(); };
+  $('#pivotDate').onchange = e => { S.pivotDate = e.target.value; S.pivotId = null; save(); renderAll(); };
+  $('#pivotClear').onclick = () => { S.pivotId = null; S.pivotDate = ''; $('#pivotDate').value = ''; save(); renderAll(); };
+  let qt;
+  $('#pivotSearch').oninput = e => { clearTimeout(qt); qt = setTimeout(() => renderPicker(e.target.value.trim().toLowerCase()), 150); };
+}
+function renderPicker(q) {
+  const box = $('#pivotPicker');
+  if (!q) { box.style.display = 'none'; return; }
+  const hits = tweets.filter(tw => !isRT(tw) && text(tw).toLowerCase().includes(q)).sort((a, b) => idLT(a.id, b.id) ? 1 : -1).slice(0, 60);
+  box.style.display = ''; box.innerHTML = '';
+  hits.forEach(tw => {
+    const d = el('div', tw.id === S.pivotId ? 'sel' : '');
+    d.innerHTML = `<span class="d">${date(tw).toISOString().slice(0, 10)}</span><span>${esc(text(tw).slice(0, 120))}</span>`;
+    d.onclick = () => { S.pivotId = tw.id; S.pivotDate = ''; $('#pivotDate').value = ''; save(); renderAll(); renderPicker(q); };
+    box.appendChild(d);
+  });
+  if (!hits.length) box.appendChild(el('div', '', t('nothing')));
+}
+function renderPivot() {
+  const p = effectivePivot(); const box = $('#pivotNow');
+  if (!p) { box.textContent = t('pivot_none'); return; }
+  const n = tweets.filter(tw => idLT(tw.id, p)).length;
+  const tw = tweets.find(x => x.id === S.pivotId);
+  box.innerHTML = `<b>${t('pivot_set')}</b> ${tw ? `${date(tw).toISOString().slice(0, 10)} — ${esc(text(tw).slice(0, 100))}` : esc(S.pivotDate)} <span class="pill">${n.toLocaleString()} ${t('pivot_scope')}</span>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  step 3: rule stats
+// ─────────────────────────────────────────────────────────────
+function renderRules() {
+  const c = {}; for (const r of rules.values()) c[r.c] = (c[r.c] || 0) + 1;
+  const order = ['recent', 'blocked', 'retweet', 'reply', 'auto', 'quote', 'casual', 'candidate'];
+  $('#ruleStats').innerHTML = order.filter(k => c[k]).map(k => `<tr><td>${t('r_' + k)}</td><td><b>${c[k].toLocaleString()}</b></td></tr>`).join('');
+  $('#n3').classList.toggle('done', tweets.length > 0);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  step 4: AI pass
+// ─────────────────────────────────────────────────────────────
+function batches() { const out = []; for (let i = 0; i < candidates.length; i += S.batchSize) out.push(candidates.slice(i, i + S.batchSize)); return out; }
+function renderBatches() {
+  const bs = batches(); const box = $('#batches'); box.innerHTML = '';
+  if (selBatch >= bs.length) selBatch = Math.max(0, bs.length - 1);
+  let judgedAll = 0;
+  bs.forEach((b, i) => {
+    const judged = b.filter(tw => S.ai[tw.id]).length; judgedAll += judged;
+    const d = el('div', `batch ${i === selBatch ? 'sel' : ''} ${judged === b.length ? 'done' : ''}`);
+    d.innerHTML = `${t('batch_sel')} ${i + 1}<small>${judged}/${b.length} ${t('judged')}</small>`;
+    d.onclick = () => { selBatch = i; renderBatches(); };
+    box.appendChild(d);
+  });
+  $('#batchInfo').textContent = bs.length ? `${t('batch_sel')} ${selBatch + 1} ${t('of')} ${bs.length} · ${bs[selBatch].length} ${t('tweets')} · ${judgedAll.toLocaleString()} ${t('judged')}, ${(candidates.length - judgedAll).toLocaleString()} ${t('unjudged')}` : '';
+  $('#copyBatch').disabled = !bs.length;
+  $('#n4').classList.toggle('done', candidates.length > 0 && judgedAll === candidates.length);
+}
+function batchText(b) {
+  const rubric = S.rubric.replace('{{PROFILE}}', S.profile.trim() || '(no profile given)');
+  const lines = b.map(tw => `${tw.id} | ${date(tw).toISOString().slice(0, 10)} | ♥${fav(tw)} | ${text(tw).replace(/\s+/g, ' ')}`);
+  return `${rubric}
+
+=== TASK ===
+Below are ${b.length} tweets, one per line: id | date | likes | text.
+For EVERY tweet, reply with exactly one line in this format and nothing else:
+<id> <keep|delete> <category> <short reason only if keep>
+Example:
+123456789 keep achievement selected for a residency
+123456790 delete casual
+Do not skip any id. Do not add commentary before or after.
+
+=== TWEETS ===
+${lines.join('\n')}`;
+}
+async function copyText(s) {
+  try { await navigator.clipboard.writeText(s); toast(t('copied')); return true; }
+  catch { const ta = el('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); toast(ok ? t('copied') : t('copy_fail')); return ok; }
+}
+$('#copyBatch').onclick = () => { const bs = batches(); if (bs.length) copyText(batchText(bs[selBatch])); };
+function parseReply(s) {
+  const out = {}; let unknown = 0;
+  const known = new Set(candidates.map(tw => tw.id));
+  for (let line of s.split('\n')) {
+    line = line.trim(); if (!line) continue;
+    let m;
+    if (line.startsWith('{')) { try { const o = JSON.parse(line.replace(/,$/, '')); if (o.id) { out[String(o.id)] = { d: o.d === 'keep' ? 'keep' : 'delete', c: o.c || (o.d === 'keep' ? 'announce' : 'other'), r: o.r || '' }; continue; } } catch {} }
+    // separators are limited to ASCII punctuation/space: \W would swallow non-Latin reasons (Japanese etc.)
+    m = line.match(/^[\s\-*#|,:;."']*(\d{6,})[\s|,:;\-]*(keep|delete)\b[\s|,:;\-]*([A-Za-z_]+)?[\s|,:;\-]*(.*)$/i);
+    if (!m) { if (/\d{6,}/.test(line)) unknown++; continue; }
+    const [, id, d, c, r] = m;
+    if (!known.has(id)) { unknown++; continue; }
+    const dd = d.toLowerCase();
+    let cc = (c || '').toLowerCase();
+    if (dd === 'keep' && !KEEP_CATS.has(cc)) cc = 'announce';
+    if (dd === 'delete' && (KEEP_CATS.has(cc) || !cc)) cc = 'other';
+    out[id] = { d: dd, c: cc, r: dd === 'keep' ? (r || '').trim().slice(0, 60) : '' };
+  }
+  return { out, unknown };
+}
+$('#applyPaste').onclick = () => {
+  const { out, unknown } = parseReply($('#pasteBox').value);
+  const n = Object.keys(out).length;
+  if (!n) { toast(`0 ${t('applied')} — ${unknown} ${t('unknown_ids')}`); return; }
+  Object.assign(S.ai, out); save();
+  $('#pasteBox').value = '';
+  $('#pasteInfo').textContent = `${n} ${t('applied')}${unknown ? ` · ${unknown} ${t('unknown_ids')}` : ''}`;
+  // advance to the next unfinished batch
+  const bs = batches(); const next = bs.findIndex((b, i) => i > selBatch && b.some(tw => !S.ai[tw.id])); if (next >= 0) selBatch = next;
+  renderAll();
+};
+$('#clearAi').onclick = () => { if (!Object.keys(S.ai).length) return; if (!confirm(t('clear_ai') + '?')) return; S.ai = {}; save(); renderAll(); };
+
+// ─────────────────────────────────────────────────────────────
+//  step 5: review
+// ─────────────────────────────────────────────────────────────
+function renderReview() {
+  const cnt = { keep: 0, delete: 0, skip: 0 };
+  for (const tw of tweets) cnt[decisionOf(tw)]++;
+  $('#counts').innerHTML = `<span>${t('st_keep')} <b class="k">${cnt.keep.toLocaleString()}</b></span><span>${t('st_delete')} <b class="d">${cnt.delete.toLocaleString()}</b></span><span>${t('st_skip')} <b class="s">${cnt.skip.toLocaleString()}</b></span>`;
+  const st = $('#stats'); st.innerHTML = '';
+  [['keep', 'st_keep'], ['delete', 'st_delete'], ['skip', 'st_skip'], ['', 'st_all']].forEach(([d, k]) => {
+    const s = el('div', `stat ${d} ${view.d === d ? 'on' : ''}`, `${t(k)}<b>${(d ? cnt[d] : tweets.length).toLocaleString()}</b>`);
+    s.onclick = () => { view.d = d; view.page = 0; renderReview(); }; st.appendChild(s);
+  });
+  const years = {}; for (const tw of tweets) { const y = date(tw).getFullYear(); years[y] = years[y] || { k: 0, n: 0 }; years[y].n++; if (decisionOf(tw) === 'keep') years[y].k++; }
+  const ys = Object.keys(years).sort(); const maxN = Math.max(...ys.map(y => years[y].n));
+  const yb = $('#yearbar'); yb.innerHTML = '';
+  ys.forEach(y => {
+    const d = el('div', view.year === y ? 'on' : ''); d.style.height = `${Math.max(4, years[y].n / maxN * 100)}%`;
+    const k = el('i'); k.style.height = `${years[y].k / years[y].n * 100}%`; d.appendChild(k); d.appendChild(el('span', '', y.slice(2)));
+    d.title = `${y}: ${t('st_keep')} ${years[y].k} / ${years[y].n}`;
+    d.onclick = () => { view.year = view.year === y ? '' : y; view.page = 0; renderReview(); }; yb.appendChild(d);
+  });
+  // category select
+  const cats = [...new Set(tweets.map(categoryOf))].sort(); const sel = $('#cat'); const cur = view.cat;
+  sel.innerHTML = `<option value="">${t('cat_all')}</option>` + cats.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${esc(catName(c))}</option>`).join('');
+
+  const q = view.q.trim().toLowerCase();
+  let list = tweets.filter(tw => {
+    if (view.d && decisionOf(tw) !== view.d) return false;
+    if (view.cat && categoryOf(tw) !== view.cat) return false;
+    if (view.year && String(date(tw).getFullYear()) !== view.year) return false;
+    const r = rules.get(tw.id); const ai = r.d === 'review' && S.ai[tw.id]; const ov = S.overrides[tw.id];
+    if (view.src === 'ai' && !ai) return false;
+    if (view.src === 'rule' && (ai || ov)) return false;
+    if (view.src === 'manual' && !ov) return false;
+    if (q && !text(tw).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  list.sort((a, b) => (idLT(a.id, b.id) ? -1 : 1) * (view.desc ? -1 : 1));
+  const pages = Math.max(1, Math.ceil(list.length / PAGE)); view.page = Math.min(view.page, pages - 1);
+  const box = $('#list'); box.innerHTML = '';
+  const slice = list.slice(view.page * PAGE, (view.page + 1) * PAGE);
+  if (!slice.length) box.appendChild(el('div', 'empty', t('nothing')));
+  slice.forEach(tw => box.appendChild(card(tw, q)));
+  const pg = $('#pager'); pg.innerHTML = '';
+  const prev = el('button', 'btn small', '←'); prev.disabled = view.page === 0; prev.onclick = () => { view.page--; renderReview(); $('#s5').scrollIntoView(); };
+  const next = el('button', 'btn small', '→'); next.disabled = view.page >= pages - 1; next.onclick = () => { view.page++; renderReview(); $('#s5').scrollIntoView(); };
+  pg.appendChild(prev); pg.appendChild(el('span', '', `${list.length.toLocaleString()} · ${view.page + 1} / ${pages}`)); pg.appendChild(next);
+  $('#n5').classList.toggle('done', tweets.length > 0);
+  $('#n6').classList.toggle('done', false);
+}
+function linkify(s, q) {
+  let h = esc(s).replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  if (q) h = h.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark>$1</mark>');
+  return h;
+}
+function card(tw, q) {
+  const d = decisionOf(tw), c = categoryOf(tw), r = rules.get(tw.id), locked = LOCKED.has(r.c), ai = r.d === 'review' && S.ai[tw.id], ov = S.overrides[tw.id];
+  const art = el('article', `tweet ${d} ${ov ? 'overridden' : ''}`);
+  const left = el('div');
+  left.appendChild(el('div', 'meta',
+    `<span>${date(tw).toISOString().slice(0, 10)}</span>` +
+    `<span class="cat ${d === 'keep' ? 'k' : ''} ${locked ? 'lock' : ''}">${locked ? '🔒 ' : ''}${esc(catName(c))}</span>` +
+    `<span>${ai ? 'AI' : t('rule')}</span>` + (ov ? `<span style="color:var(--accent)">${t('manual')}</span>` : '') +
+    `<span>♥ ${fav(tw)} · ⟲ ${rtc(tw)}</span>` + (ai && ai.r ? `<span class="reason">${esc(ai.r)}</span>` : '') +
+    `<a href="https://x.com/i/status/${tw.id}" target="_blank" rel="noopener noreferrer">${t('open')}</a>`));
+  left.appendChild(el('div', 'text', linkify(text(tw), q)));
+  const m = media(tw); if (m.length) left.appendChild(el('div', 'meta', m.map(x => `<a href="${esc(x.media_url_https || x.media_url || '')}" target="_blank" rel="noopener noreferrer">🖼 ${esc(x.type || 'media')}</a>`).join('')));
+  art.appendChild(left);
+  const act = el('div', 'act');
+  const bk = el('button', d === 'keep' ? 'on-keep' : '', t('keep')); const bd = el('button', d === 'delete' ? 'on-del' : '', t('delete'));
+  if (locked) { bk.disabled = bd.disabled = true; bk.title = bd.title = t('locked_tip'); }
+  const base = () => { const rr = rules.get(tw.id); return rr.d !== 'review' ? rr.d : (S.ai[tw.id] ? S.ai[tw.id].d : 'delete'); };
+  bk.onclick = () => { if (base() === 'keep') delete S.overrides[tw.id]; else S.overrides[tw.id] = 'keep'; save(); renderReview(); };
+  bd.onclick = () => { if (base() === 'delete') delete S.overrides[tw.id]; else S.overrides[tw.id] = 'delete'; save(); renderReview(); };
+  act.appendChild(bk); act.appendChild(bd); art.appendChild(act);
+  return art;
+}
+let qt2;
+$('#q').oninput = e => { clearTimeout(qt2); qt2 = setTimeout(() => { view.q = e.target.value; view.page = 0; renderReview(); }, 180); };
+$('#cat').onchange = e => { view.cat = e.target.value; view.page = 0; renderReview(); };
+$('#src').onchange = e => { view.src = e.target.value; view.page = 0; renderReview(); };
+$('#sort').onclick = () => { view.desc = !view.desc; $('#sort').textContent = view.desc ? t('newest') : t('oldest'); renderReview(); };
+$('#resetOv').onclick = () => { if (!Object.keys(S.overrides).length) return; if (!confirm(t('reset_confirm'))) return; S.overrides = {}; save(); renderReview(); };
+
+// ─────────────────────────────────────────────────────────────
+//  step 6: export + deleter
+// ─────────────────────────────────────────────────────────────
+function download(obj, name) {
+  const a = el('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+$('#exportList').onclick = () => {
+  const del = [], keep = [];
+  for (const tw of tweets) {
+    const d = decisionOf(tw); const o = { id: tw.id, date: date(tw).toISOString().slice(0, 10), c: categoryOf(tw) };
+    if (d === 'delete') del.push({ ...o, text: text(tw).slice(0, 60) });
+    else if (d === 'keep') keep.push({ ...o, text: text(tw), r: (S.ai[tw.id] || {}).r || '' });
+  }
+  del.sort((a, b) => idLT(a.id, b.id) ? -1 : 1);
+  const gen = new Date().toISOString();
+  download({ generated: gen, pivot_id: effectivePivot(), count: del.length, keep_count: keep.length, ids: del }, 'delete_list.json');
+  setTimeout(() => download({ generated: gen, count: keep.length, items: keep }, 'keep_list.json'), 400);
+  $('#n6').classList.add('done');
+  toast(`${t('exported')} (${del.length.toLocaleString()} / ${keep.length.toLocaleString()})`);
+};
+$('#copyDeleter').onclick = async () => {
+  try { const r = await fetch('deleter.js'); if (!r.ok) throw 0; copyText(await r.text()); }
+  catch { toast(t('copy_fail')); }
+};
+
+// ─────────────────────────────────────────────────────────────
+//  boot
+// ─────────────────────────────────────────────────────────────
+function renderAll() { runRules(); renderPivot(); renderRules(); renderBatches(); renderReview(); }
+load();
+bindSettings();
+applyLang();
+})();
+</script>
+</body>
+</html>
