@@ -231,11 +231,19 @@
     return out;
   }
 
+  // Wall-clock wait. Chrome slows timers in hidden tabs (down to one tick per minute),
+  // so counting ticks would stretch a 5-minute wait into hours. Compare against Date.now() instead.
   async function waitRateLimit(resetEpoch, reason) {
-    let secs = Number.isFinite(resetEpoch) && resetEpoch > 0
+    const secs = Number.isFinite(resetEpoch) && resetEpoch > 0
       ? Math.max(5, resetEpoch - Math.floor(Date.now() / 1000) + 2) : RATE_FALLBACK;
-    log(`⏳ ${reason} — waiting ${secs}s`, '#ffb700');
-    while (secs > 0 && !stopFlag) { updateStatus(`STATUS  RATE LIMIT  ${secs}s`, '#ffb700'); await sleep(1000); secs--; }
+    const until = Date.now() + secs * 1000;
+    log(`⏳ ${reason} — waiting ${secs}s (until ${new Date(until).toTimeString().slice(0, 8)})`, '#ffb700');
+    while (!stopFlag) {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (left <= 0) break;
+      updateStatus(`STATUS  RATE LIMIT  ${left}s`, '#ffb700');
+      await sleep(Math.min(1000, left * 1000));
+    }
     updateStatus('STATUS  RUNNING', '#00ff41');
   }
 
@@ -338,4 +346,5 @@
   log('▓ TWEET AFTERGLOW ready ▓', '#00aa33');
   log('① Load data/delete_list.json   ② START', '#1a6b2e');
   log('   Tip: tick DRY RUN for the first run', '#1a6b2e');
+  log('   Keep this tab visible (own window is best): Chrome slows down hidden tabs', '#1a6b2e');
 })();
