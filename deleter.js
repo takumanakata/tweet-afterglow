@@ -36,6 +36,7 @@
   let items = [], listKey = '', done = new Set(), failed = [];
   let stopFlag = false, running = false, dryRun = false;
   let nDeleted = 0, nGone = 0, nFailed = 0;
+  let runStart = 0, runStartDone = 0;   // for the ETA: wall-clock throughput including rate-limit waits
 
   const sleep  = ms => new Promise(r => setTimeout(r, ms));
   const nowStr = () => new Date().toTimeString().slice(0, 8);
@@ -120,9 +121,17 @@
   function updateCount() {
     const total = items.length;
     const finished = done.size + (running && dryRun ? nDeleted : 0);
+    let eta = '';
+    if (running && runStart) {
+      const did = finished - runStartDone, mins = (Date.now() - runStart) / 60000;
+      if (did >= 50 && mins >= 3) {
+        const leftMin = (total - finished) / (did / mins);
+        eta = `   ETA ~${leftMin >= 90 ? (leftMin / 60).toFixed(1) + 'h' : Math.round(leftMin) + 'min'}`;
+      }
+    }
     countRow.textContent =
       `DELETED ${nDeleted.toLocaleString()}  ALREADY GONE ${nGone.toLocaleString()}  FAILED ${nFailed.toLocaleString()}\n` +
-      `DONE ${finished.toLocaleString()} / ${total.toLocaleString()}   REMAINING ${(total - finished).toLocaleString()}`;
+      `DONE ${finished.toLocaleString()} / ${total.toLocaleString()}   REMAINING ${(total - finished).toLocaleString()}${eta}`;
     barInner.style.width = total ? `${(finished / total) * 100}%` : '0%';
   }
 
@@ -242,6 +251,7 @@
       const left = Math.ceil((until - Date.now()) / 1000);
       if (left <= 0) break;
       updateStatus(`STATUS  RATE LIMIT  ${left}s`, '#ffb700');
+      if (left % 10 === 0) updateCount();
       await sleep(Math.min(1000, left * 1000));
     }
     updateStatus('STATUS  RUNNING', '#00ff41');
@@ -260,6 +270,7 @@
 
     const queue = items.filter(x => !done.has(x.id));
     const dryDone = new Set();
+    runStart = Date.now(); runStartDone = done.size;
     updateStatus(dryRun ? 'STATUS  DRY RUN' : 'STATUS  RUNNING', '#00ff41');
     log(`▶ start — ${queue.length.toLocaleString()} tweets${dryRun ? ' (DRY RUN: nothing is deleted)' : ''}`);
 
