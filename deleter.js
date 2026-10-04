@@ -354,7 +354,19 @@
     log(`⬇ results exported (${failed.length} failed / ${remaining.length} remaining)`, '#ffb700');
   };
 
+  // Warn before the tab is reloaded or closed while a run is in progress
+  window.addEventListener('beforeunload', e => { if (running) { e.preventDefault(); e.returnValue = ''; } });
+
   log('▓ TWEET AFTERGLOW ready ▓', '#00aa33');
+  // Report any saved progress from earlier runs, before a list is even loaded
+  try {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('__ta_done__'));
+    for (const k of keys) {
+      const n = (localStorage.getItem(k) || '').split(',').filter(Boolean).length;
+      const m = k.match(/^__ta_done__(.+)_(\d+)$/);
+      log(`↻ saved progress: ${n.toLocaleString()} done of ${m ? Number(m[2]).toLocaleString() : '?'} (list exported ${m ? m[1] : '?'}). Load that list to resume.`, '#ffb700');
+    }
+  } catch {}
   log('① Load data/delete_list.json   ② START', '#1a6b2e');
   log('   Tip: tick DRY RUN for the first run', '#1a6b2e');
   log('   Keep this tab visible (own window is best): Chrome slows down hidden tabs', '#1a6b2e');
